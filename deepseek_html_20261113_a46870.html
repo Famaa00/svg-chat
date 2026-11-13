@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Studio SVG Animé · V6</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #050505; --panel: #121212; --panel-2: #1c1c1c; --border: #2a2a2a;
+    --text: #e0e0e0; --muted: #888; --accent: #ff0050; --accent-hover: #cc0040;
+    --ok: #00f2ea; --err: #ff4d4d; --warn: #ffcc00;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-code: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  html, body {
+    background: var(--bg); color: var(--text); font-family: var(--font-ui);
+    height: 100%; overflow: hidden;
+  }
+  #app { position: relative; width: 100vw; height: 100dvh; overflow: hidden; }
+
+  /* ============ ÉCRANS ============ */
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.45s ease;
+  }
+  .screen.active { opacity: 1; pointer-events: auto; }
+
+  /* ============ ÉCRAN 1 · SAISIE ============ */
+  #screen-input {
+    align-items: center; justify-content: center;
+    padding: 24px; overflow-y: auto;
+    background: radial-gradient(ellipse at 50% 0%, #1a0010 0%, #050505 60%);
+  }
+  .input-wrap { width: 100%; max-width: 620px; display: flex; flex-direction: column; gap: 20px; }
+  .hero { text-align: center; margin-bottom: 8px; }
+  .hero h1 {
+    font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em;
+    background: linear-gradient(90deg, #ff0050, #00f2ea);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .hero p { color: var(--muted); font-size: 0.9rem; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 20px; padding: 24px;
+    display: flex; flex-direction: column; gap: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .field label {
+    display: block; font-size: 0.8rem; color: var(--muted);
+    margin-bottom: 6px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  textarea, input, select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px; color: var(--text);
+    font-size: 0.95rem; font-family: inherit; transition: border-color 0.2s;
+  }
+  textarea:focus, input:focus, select:focus { outline: none; border-color: var(--accent); }
+  #topic { height: 100px; resize: vertical; font-size: 1rem; }
+  #apiKeys { height: 90px; font-family: var(--font-code); font-size: 0.78rem; }
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .row-3 { grid-template-columns: 1fr; } }
+  details {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px;
+  }
+  details summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); font-weight: 600; user-select: none; }
+  details[open] summary { margin-bottom: 12px; }
+  button.primary {
+    background: linear-gradient(135deg, #ff0050, #cc0040);
+    color: #fff; border: none; border-radius: 14px;
+    padding: 18px 24px; font-size: 1.05rem; font-weight: 700;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 8px 24px rgba(255,0,80,0.3);
+  }
+  button.primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(255,0,80,0.45);
+  }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { text-align: center; font-size: 0.85rem; color: var(--muted); min-height: 20px; }
+  #status.error { color: var(--err); }
+
+  /* ============ ÉCRAN 2 · LOADER ============ */
+  #screen-loader {
+    align-items: center; justify-content: flex-start;
+    padding: 40px 24px; overflow-y: auto;
+    background: radial-gradient(ellipse at 50% 30%, #150008 0%, #050505 70%);
+  }
+  .loader-wrap {
+    width: 100%; max-width: 900px;
+    display: flex; flex-direction: column; align-items: center; gap: 22px;
+    margin: auto 0;
+  }
+  .loader-header {
+    display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .spinner {
+    width: 26px; height: 26px; flex-shrink: 0;
+    border: 3px solid #2a2a2a; border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loaderStatus { font-size: 1.05rem; font-weight: 600; color: var(--text); text-align: center; }
+  #loaderElapsed { font-size: 0.8rem; color: var(--muted); font-family: var(--font-code); }
+  .loader-bar {
+    width: min(480px, 100%); height: 6px;
+    background: #1a1a1a; border-radius: 3px; overflow: hidden;
+  }
+  #loaderBar {
+    height: 100%; width: 0;
+    background: linear-gradient(90deg, #ff0050, #00f2ea);
+    transition: width 0.4s ease;
+  }
+  #planTitle {
+    font-size: 1.1rem; font-weight: 700; text-align: center;
+    background: linear-gradient(90deg, #ff0050, #00f2ea);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: -0.01em;
+  }
+  .plan-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px; width: 100%; max-width: 900px;
+    max-height: 55vh; overflow-y: auto; padding: 8px;
+  }
+  .plan-card {
+    display: flex; flex-direction: column; gap: 6px;
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.4s, transform 0.4s;
+  }
+  .plan-card.visible { opacity: 1; transform: translateY(0); }
+  .plan-card-visual {
+    aspect-ratio: 9/16; border-radius: 10px; overflow: hidden;
+    background: #0a0a0a; border: 1px solid #2a2a2a;
+    position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .plan-card-visual svg { width: 100%; height: 100%; display: block; }
+  .plan-card-spinner {
+    width: 22px; height: 22px;
+    border: 2px solid #2a2a2a; border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  .plan-card.done .plan-card-visual { border-color: var(--ok); }
+  .plan-card.error .plan-card-visual { border-color: var(--err); }
+  .plan-card-meta {
+    display: flex; flex-direction: column; gap: 2px; padding: 0 2px;
+  }
+  .plan-card-num {
+    font-size: 0.7rem; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .plan-card-desc {
+    font-size: 0.68rem; color: var(--muted); line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ============ ÉCRAN 3 · LECTEUR ============ */
+  #screen-viewer { background: #000; }
+  .viewer-container {
+    flex: 1; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    background: radial-gradient(circle at 50% 40%, #0f0018 0%, #000 70%);
+  }
+  .phone-frame {
+    position: relative; background: #000;
+    border-radius: 28px; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.9),
+                0 0 0 2px #1a1a1a,
+                0 0 0 8px #0a0a0a;
+  }
+  .stage { position: absolute; inset: 0; overflow: hidden; background: #000; }
+  .scene-layer {
+    position: absolute; inset: 0;
+    transform: translateY(100%);
+    transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+  }
+  .scene-layer.active { transform: translateY(0); }
+  .scene-layer.exit { transform: translateY(-100%); }
+  .scene-layer svg { width: 100%; height: 100%; display: block; }
+
+  /* Overlay : dialogue + bouton Suivant */
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 0 18px 26px; pointer-events: none;
+    background: linear-gradient(transparent 55%, rgba(0,0,0,0.85));
+    z-index: 10;
+  }
+  .dialogue {
+    color: #fff; font-size: clamp(14px, 4.2vw, 20px);
+    font-weight: 700; text-align: center; line-height: 1.35;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.7);
+    padding: 0 6px 20px;
+    opacity: 0; transform: translateY(10px);
+    transition: opacity 0.5s 0.2s, transform 0.5s 0.2s;
+  }
+  .scene-layer.active ~ .overlay .dialogue,
+  .dialogue.active { opacity: 1; transform: translateY(0); }
+  .next-btn {
+    pointer-events: auto; align-self: center;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 100px;
+    padding: 14px 34px; font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+    box-shadow: 0 8px 24px rgba(255,0,80,0.5);
+    letter-spacing: 0.02em;
+    font-family: inherit;
+  }
+  .next-btn:hover { transform: scale(1.04); box-shadow: 0 12px 32px rgba(255,0,80,0.65); }
+  .next-btn:active { transform: scale(0.97); }
+  .next-btn.restart { background: #1c1c1c; border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .next-btn.restart:hover { background: #252525; }
+
+  .viewer-topbar {
+    height: 48px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px;
+    background: #0a0a0a; border-bottom: 1px solid #1a1a1a;
+  }
+  .icon-btn {
+    width: 36px; height: 36px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 10px; font-size: 1rem;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .icon-btn:hover { background: #252525; }
+  #viewerTitle {
+    flex: 1; text-align: center; font-size: 0.85rem; font-weight: 600;
+    color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 0 12px;
+  }
+  #viewerCounter {
+    font-size: 0.78rem; color: var(--muted); font-family: var(--font-code);
+    min-width: 46px; text-align: right;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ========== ÉCRAN 1 · SAISIE ========== -->
+  <section id="screen-input" class="screen active">
+    <div class="input-wrap">
+      <div class="hero">
+        <h1>Studio SVG Animé</h1>
+        <p>L'IA écrit et anime votre scène SVG. Naviguez d'un bouton.</p>
+      </div>
+      <div class="card">
+        <div class="field">
+          <label for="topic">Votre question</label>
+          <textarea id="topic" placeholder="Ex : Pourquoi la popularité d'Édouard Philippe s'effondre-t-elle ?"></textarea>
+        </div>
+        <div class="row-3">
+          <div class="field">
+            <label for="style">Style</label>
+            <select id="style">
+              <option value="infographie">Infographie</option>
+              <option value="neon" selected>Néon</option>
+              <option value="papier">Papier</option>
+              <option value="brutaliste">Brutaliste</option>
+              <option value="cinema">Cinéma</option>
+              <option value="cosmique">Cosmique</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tone">Ton</label>
+            <select id="tone">
+              <option value="pédagogique">Pédagogique</option>
+              <option value="dramatique" selected>Dramatique</option>
+              <option value="humoristique">Humoristique</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sceneCount">Scènes</label>
+            <select id="sceneCount">
+              <option value="4">4</option>
+              <option value="6" selected>6</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+            </select>
+          </div>
+        </div>
+        <details>
+          <summary>Clés API (une par ligne)</summary>
+          <textarea id="apiKeys" placeholder="sk-key-1&#10;sk-key-2"></textarea>
+        </details>
+        <button id="generateBtn" class="primary">Générer l'animation →</button>
+        <div id="status"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== ÉCRAN 2 · LOADER ========== -->
+  <section id="screen-loader" class="screen">
+    <div class="loader-wrap">
+      <div class="loader-header">
+        <div class="spinner"></div>
+        <h2 id="loaderStatus">Analyse en cours…</h2>
+        <span id="loaderElapsed">0s</span>
+      </div>
+      <div class="loader-bar"><div id="loaderBar"></div></div>
+      <div id="planTitle"></div>
+      <div class="plan-grid" id="planGrid"></div>
+    </div>
+  </section>
+
+  <!-- ========== ÉCRAN 3 · LECTEUR ========== -->
+  <section id="screen-viewer" class="screen">
+    <div class="viewer-topbar">
+      <button id="backBtn" class="icon-btn" title="Recommencer">←</button>
+      <div id="viewerTitle">Animation</div>
+      <div id="viewerCounter">1/1</div>
+    </div>
+    <div class="viewer-container">
+      <div class="phone-frame" id="phoneFrame">
+        <div class="stage" id="stage"></div>
+        <div class="overlay">
+          <div class="dialogue" id="dialogue"></div>
+          <button class="next-btn" id="nextBtn">Suivant →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+ *  PALETTES
+ * ============================================================ */
+const PALETTES = {
+  infographie: { bg: '#F8F9FA', fg: '#212529', accent: '#E63946', secondary: '#457B9D', gradient: '#E9ECEF' },
+  neon:        { bg: '#0A0A0A', fg: '#FFFFFF', accent: '#00F5D4', secondary: '#F15BB5', gradient: '#1A0B2E' },
+  papier:      { bg: '#FDF6E3', fg: '#3D3D3D', accent: '#D97706', secondary: '#65A30D', gradient: '#F5E6C8' },
+  brutaliste:  { bg: '#FFFFFF', fg: '#000000', accent: '#FF0000', secondary: '#0000FF', gradient: '#EEEEEE' },
+  cinema:      { bg: '#111111', fg: '#F1F1F1', accent: '#FFB703', secondary: '#8ECAE6', gradient: '#2B2D42' },
+  cosmique:    { bg: '#0B0014', fg: '#F5F0FF', accent: '#B47CFF', secondary: '#4ECDC4', gradient: '#1F0A3C' }
+};
+
+const API_BASE = 'https://apihub.agnes-ai.com/v1';
+const MODEL_TEXT = 'agnes-2.5-flash';
+const SCENE_DURATION_MS = 7000;
+
+const state = {
+  keyPool: null,
+  plan: null,
+  scenes: [],
+  currentIdx: -1,
+  layers: [],
+  animating: false,
+  style: 'neon',
+  startTime: 0,
+  timerInterval: null
+};
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* ============================================================
+ *  UTILITAIRES
+ * ============================================================ */
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function parseKeys() {
+  return [...new Set($('apiKeys').value.split('\n').map(l => l.trim()).filter(Boolean))];
+}
+function fmtTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + (s % 60) + 's';
+}
+
+/* ============================================================
+ *  POOL DE CLÉS
+ * ============================================================ */
+class KeyPool {
+  constructor(keys) {
+    this.keys = keys.map(k => ({ key: k, cooldownUntil: 0, busy: 0 }));
+  }
+  getAvailable() {
+    const now = Date.now();
+    return this.keys.find(k => k.cooldownUntil <= now) || null;
+  }
+  cooldown(k, ms) { k.cooldownUntil = Date.now() + ms; }
+  msUntilNext() {
+    const now = Date.now();
+    const min = Math.min(...this.keys.map(k => k.cooldownUntil));
+    return Math.max(0, min - now);
+  }
+}
+
+async function callLLM(messages, maxRetries = 4) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const k = state.keyPool.getAvailable();
+    if (!k) {
+      const wait = Math.min(state.keyPool.msUntilNext() + 200, 8000);
+      await sleep(wait);
+      continue;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${k.key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: MODEL_TEXT, messages, temperature: 0.85, max_tokens: 4500 })
+      });
+      if (res.status === 429) {
+        state.keyPool.cooldown(k, 20000);
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch (e) {
+      if (attempt === maxRetries - 1) throw e;
+      await sleep(800 * (attempt + 1));
+    }
+  }
+  throw new Error('Toutes les tentatives ont échoué');
+}
+
+/* ============================================================
+ *  ÉTAPE 1 · PLAN
+ * ============================================================ */
+function buildPlanPrompt(topic, style, tone, sceneCount) {
+  return `Tu es un directeur artistique spécialisé en animation SVG cinématique. Tu prépares le plan d'un film vertical (format 9:16, 1080×1920) de ${sceneCount} scènes sur : "${topic}".
+
+Style visuel : ${style}. Ton : ${tone}.
+
+Chaque scène sera ensuite transformée en un SVG animé par un autre agent. Ta description doit lui donner tout le matériel visuel nécessaire.
+
+Réponds UNIQUEMENT en JSON (aucun texte autour, aucun markdown) :
+
+{
+  "titre": "Titre percutant du film (5-8 mots)",
+  "scenes": [
+    {
+      "id": 1,
+      "description": "Description visuelle TRÈS RICHE de la scène : éléments à dessiner (formes, icônes, chiffres, illustrations, schémas, particules), ambiance colorée, ce qui doit bouger, ce qui apparaît. Sois précis et évocateur (3-5 phrases).",
+      "dialogue": "Texte de narration à afficher à l'écran (12-20 mots, percutant)"
+    }
+  ]
+}
+
+Contraintes :
+- Fais évoluer la narration (début → développement → climax → conclusion).
+- Chaque description visuelle doit être DISTINCTE des autres.
+- Le dialogue doit être court mais marquant.`;
+}
+
+async function generatePlan(topic, style, tone, sceneCount) {
+  const raw = await callLLM([{ role: 'user', content: buildPlanPrompt(topic, style, tone, sceneCount) }]);
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('JSON invalide dans la réponse du plan');
+  const plan = JSON.parse(match[0]);
+  if (!Array.isArray(plan.scenes) || !plan.scenes.length) throw new Error('Plan sans scènes');
+  return plan;
+}
+
+/* ============================================================
+ *  ÉTAPE 2 · GÉNÉRATION SVG PAR SCÈNE
+ * ============================================================ */
+function buildScenePrompt(scene, plan, style, tone, palette) {
+  return `Tu es un maître de l'animation SVG. Tu vas créer UNE scène SVG animée complète pour un film vertical (1080×1920).
+
+CONTEXTE
+- Titre du film : ${plan.titre}
+- Scène ${scene.id} / ${plan.scenes.length}
+- Description visuelle : ${scene.description}
+- Texte de narration (à afficher dans la scène, en bas ou intégré) : "${scene.dialogue}"
+- Style visuel : ${style}
+- Ton : ${tone}
+
+PALETTE
+- Fond : ${palette.bg} → ${palette.gradient}
+- Accent : ${palette.accent}
+- Secondaire : ${palette.secondary}
+- Texte : ${palette.fg}
+
+RÈGLES ABSOLUES
+1. Retourne UNIQUEMENT un élément <svg>...</svg>. Pas de markdown, pas d'explication, pas de texte avant/après.
+2. Attributs obligatoires : xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice"
+3. Aucune ressource externe : pas d'URL, pas d'<image href="...">, pas de <foreignObject>, pas de police externe.
+4. Utilise <defs> pour les gradients, filtres (feGaussianBlur, feDropShadow), patterns.
+
+ANIMATIONS (au moins 10 SMIL)
+Utilise abondamment : <animate>, <animateTransform>, <animateMotion>, <animateColor>.
+Inclus OBLIGATOIREMENT :
+- Un élément qui PULSE (scale 1 → 1.05 → 1, repeatCount="indefinite")
+- Au moins 2 éléments qui FLOTTENT (translate Y ±20px, désynchronisés)
+- Un élément qui TOURNE lentement (rotate 360° en 10-20s) OU un anneau qui s'ÉTEND (r → +50)
+- Un élément qui parcourt un chemin avec <animateMotion> (un point, une particule, une comète)
+- Un effet de TRAIT QUI SE DESSINE (stroke-dashoffset animé) OU un compteur de chiffres qui apparaît progressivement
+- Au moins 3 éléments avec FADE IN progressif (opacity 0 → 1, décalés dans le temps)
+- Un dégradé ou une couleur qui SE TRANSFORME (animateColor ou animate sur stop-color)
+
+COMPOSITION VISUELLE (couches de l'arrière vers l'avant)
+1. Fond : rect plein-canvas avec gradient (linéaire ou radial) ANIMÉ
+2. Décor : grille, étoiles, points, vagues, ou particules — au moins 8 éléments animés en parallèle
+3. Formes géométriques flottantes : cercles, arcs, lignes, polygones (5-10), avec mouvements propres
+4. ÉLÉMENT CENTRAL : illustration construite à partir de multiples formes (graphique, icône, chiffre, schéma) qui raconte la scène
+5. Effets lumineux : halo / glow via <filter> avec feGaussianBlur
+6. Texte de narration : grand (font-size ≥ 44), lisible, dans la partie basse (y entre 1400 et 1750), sur contraste. Utilise font-family="Inter, sans-serif" ou "Georgia, serif"
+7. Accents : points clignotants, lignes animées, formes qui apparaissent
+
+QUALITÉ
+- Vise un rendu cinématique, premium, vivant.
+- Varie les timings (2s à 12s) et les easing (calcMode="spline" quand pertinent).
+- Joue sur l'opacité, les échelles, les rotations et les déplacements.
+- Le contraste du texte doit rester fort.
+
+Retourne uniquement le SVG.`;
+}
+
+function extractSVG(raw) {
+  const match = raw.match(/<svg[\s\S]*?<\/svg>/i);
+  if (!match) throw new Error('Aucun SVG dans la réponse');
+  let svg = match[0];
+  // Sécurité
+  svg = svg.replace(/<script[\s\S]*?<\/script>/gi, '');
+  svg = svg.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, '');
+  // Validation
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if (doc.querySelector('parsererror')) throw new Error('SVG mal formé');
+  const root = doc.documentElement;
+  if (root.tagName.toLowerCase() !== 'svg') throw new Error('Ce n\'est pas un SVG');
+  if (!root.getAttribute('viewBox')) root.setAttribute('viewBox', '0 0 1080 1920');
+  if (!root.getAttribute('xmlns')) root.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  if (!root.getAttribute('preserveAspectRatio')) root.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  return new XMLSerializer().serializeToString(root);
+}
+
+function fallbackSVG(scene, palette) {
+  const t = escapeHtml(scene.dialogue || scene.description || '');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="fbg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${palette.bg}"/>
+        <stop offset="1" stop-color="${palette.gradient}"/>
+        <animate attributeName="x1" values="0;1;0" dur="10s" repeatCount="indefinite"/>
+      </linearGradient>
+    </defs>
+    <rect width="1080" height="1920" fill="url(#fbg)"/>
+    <circle cx="540" cy="900" r="280" fill="${palette.accent}" opacity="0.15">
+      <animate attributeName="r" values="260;300;260" dur="4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="540" cy="900" r="200" fill="none" stroke="${palette.accent}" stroke-width="3" opacity="0.5">
+      <animateTransform attributeName="transform" type="rotate" from="0 540 900" to="360 540 900" dur="20s" repeatCount="indefinite"/>
+    </circle>
+    <text x="540" y="900" text-anchor="middle" dominant-baseline="middle" font-family="Inter, sans-serif" font-size="140" font-weight="900" fill="${palette.accent}">!</text>
+    <text x="540" y="1600" text-anchor="middle" font-family="Inter, sans-serif" font-size="52" font-weight="700" fill="${palette.fg}">${t.slice(0, 60)}</text>
+  </svg>`;
+}
+
+async function generateSceneSVG(scene, plan, style, tone, palette) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const raw = await callLLM([{ role: 'user', content: buildScenePrompt(scene, plan, style, tone, palette) }]);
+      return extractSVG(raw);
+    } catch (e) {
+      if (attempt === 1) {
+        console.warn('Fallback SVG for scene', scene.id, e);
+        return fallbackSVG(scene, palette);
+      }
+      await sleep(500);
+    }
+  }
+}
+
+/* ============================================================
+ *  LOADER UI
+ * ============================================================ */
+function updateLoader(status, progress) {
+  if (status) $('loaderStatus').textContent = status;
+  if (typeof progress === 'number') $('loaderBar').style.width = Math.min(100, progress * 100) + '%';
+  if (state.startTime) $('loaderElapsed').textContent = fmtTime(Date.now() - state.startTime);
+}
+
+function renderPlanCards(plan) {
+  $('planTitle').textContent = plan.titre;
+  const grid = $('planGrid');
+  grid.innerHTML = '';
+  plan.scenes.forEach((sc, i) => {
+    const card = document.createElement('div');
+    card.className = 'plan-card';
+    card.dataset.idx = i;
+    card.innerHTML = `
+      <div class="plan-card-visual">
+        <div class="plan-card-spinner"></div>
+      </div>
+      <div class="plan-card-meta">
+        <span class="plan-card-num">Scène ${i + 1}</span>
+        <span class="plan-card-desc">${escapeHtml(sc.description.slice(0, 70))}…</span>
+      </div>
+    `;
+    grid.appendChild(card);
+    setTimeout(() => card.classList.add('visible'), 60 + i * 60);
+  });
+}
+
+function fillPlanCard(idx, svg, isError = false) {
+  const card = document.querySelector(`.plan-card[data-idx="${idx}"]`);
+  if (!card) return;
+  card.classList.remove('done', 'error');
+  card.classList.add(isError ? 'error' : 'done');
+  card.querySelector('.plan-card-visual').innerHTML = svg;
+}
+
+/* ============================================================
+ *  LECTEUR · CALQUES
+ * ============================================================ */
+function sizeViewer() {
+  const c = document.querySelector('.viewer-container');
+  const f = $('phoneFrame');
+  if (!c || !f) return;
+  const cw = c.clientWidth - 32;
+  const ch = c.clientHeight - 32;
+  const ratio = 9 / 16;
+  let w = cw, h = w / ratio;
+  if (h > ch) { h = ch; w = h * ratio; }
+  f.style.width = Math.max(0, w) + 'px';
+  f.style.height = Math.max(0, h) + 'px';
+}
+window.addEventListener('resize', sizeViewer);
+
+function renderViewer() {
+  const stage = $('stage');
+  stage.innerHTML = '';
+  state.layers = [];
+
+  state.scenes.forEach((sc, i) => {
+    const layer = document.createElement('div');
+    layer.className = 'scene-layer';
+    layer.innerHTML = sc.svg;
+    stage.appendChild(layer);
+    state.layers.push(layer);
+  });
+
+  state.currentIdx = -1;
+  updateCounter();
+}
+
+function navigateTo(targetIdx) {
+  if (state.animating) return;
+  if (targetIdx < 0 || targetIdx >= state.scenes.length) return;
+  if (targetIdx === state.currentIdx) return;
+
+  state.animating = true;
+  const prev = state.currentIdx >= 0 ? state.layers[state.currentIdx] : null;
+  const next = state.layers[targetIdx];
+
+  // Force reflow pour capturer la transition
+  next.classList.remove('active', 'exit');
+  void next.offsetWidth;
+
+  next.classList.add('active');
+  if (prev) prev.classList.add('exit');
+
+  state.currentIdx = targetIdx;
+  updateDialogue();
+  updateCounter();
+  updateNextButton();
+
+  setTimeout(() => {
+    if (prev) prev.classList.remove('exit');
+    state.animating = false;
+  }, 720);
+}
+
+function updateDialogue() {
+  const sc = state.scenes[state.currentIdx];
+  const el = $('dialogue');
+  el.classList.remove('active');
+  // petit délai pour redéclencher l'animation
+  setTimeout(() => {
+    el.textContent = sc?.dialogue || '';
+    el.classList.add('active');
+  }, 180);
+}
+
+function updateCounter() {
+  $('viewerCounter').textContent = `${state.currentIdx + 1}/${state.scenes.length}`;
+}
+
+function updateNextButton() {
+  const btn = $('nextBtn');
+  const isLast = state.currentIdx >= state.scenes.length - 1;
+  if (isLast) {
+    btn.textContent = '↻ Revoir';
+    btn.classList.add('restart');
+  } else {
+    btn.textContent = 'Suivant →';
+    btn.classList.remove('restart');
+  }
+}
+
+/* ============================================================
+ *  ÉVÉNEMENTS
+ * ============================================================ */
+$('nextBtn').onclick = () => {
+  if (state.animating) return;
+  if (state.currentIdx >= state.scenes.length - 1) {
+    // Revoir : retour à la première scène
+    // On cache d'abord toutes les layers
+    state.layers.forEach((l, i) => {
+      if (i !== state.currentIdx) l.classList.remove('active', 'exit');
+    });
+    state.currentIdx = -1;
+    navigateTo(0);
+  } else {
+    navigateTo(state.currentIdx + 1);
+  }
+};
+
+$('backBtn').onclick = () => {
+  state.scenes = [];
+  state.layers = [];
+  state.currentIdx = -1;
+  $('stage').innerHTML = '';
+  $('planGrid').innerHTML = '';
+  $('planTitle').textContent = '';
+  showScreen('input');
+  $('generateBtn').disabled = false;
+  $('status').textContent = '';
+  $('status').className = '';
+};
+
+/* ============================================================
+ *  GESTION DES ÉCRANS
+ * ============================================================ */
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('screen-' + name).classList.add('active');
+  if (name === 'viewer') setTimeout(sizeViewer, 30);
+}
+
+/* ============================================================
+ *  ORCHESTRATION
+ * ============================================================ */
+async function pMap(items, fn, concurrency) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      try { results[i] = await fn(items[i], i); }
+      catch (e) { results[i] = { error: e }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
+async function orchestrate() {
+  const keys = parseKeys();
+  const topic = $('topic').value.trim();
+  const style = $('style').value;
+  const tone = $('tone').value;
+  const sceneCount = parseInt($('sceneCount').value, 10);
+
+  if (!keys.length) { $('status').textContent = 'Clés API manquantes'; $('status').className = 'error'; return; }
+  if (!topic) { $('status').textContent = 'Sujet manquant'; $('status').className = 'error'; return; }
+
+  state.keyPool = new KeyPool(keys);
+  state.style = style;
+  state.startTime = Date.now();
+
+  $('generateBtn').disabled = true;
+  $('status').textContent = '';
+  $('status').className = '';
+  $('loaderBar').style.width = '0%';
+  $('planGrid').innerHTML = '';
+  $('planTitle').textContent = '';
+
+  showScreen('loader');
+  updateLoader('Analyse de votre question…', 0.02);
+
+  // Timer visible
+  if (state.timerInterval) clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(() => {
+    $('loaderElapsed').textContent = fmtTime(Date.now() - state.startTime);
+  }, 500);
+
+  try {
+    // ÉTAPE 1 : Plan
+    const plan = await generatePlan(topic, style, tone, sceneCount);
+    state.plan = plan;
+    $('viewerTitle').textContent = plan.titre;
+
+    updateLoader('Plan validé · préparation des scènes…', 0.08);
+    renderPlanCards(plan);
+    await sleep(400);
+
+    // ÉTAPE 2 : SVG en parallèle (concurrence adaptée au nombre de clés)
+    const palette = PALETTES[style];
+    const concurrency = Math.max(1, Math.min(keys.length, 4, plan.scenes.length));
+    let completed = 0;
+    const total = plan.scenes.length;
+
+    const svgs = await pMap(plan.scenes, async (sc, i) => {
+      try {
+        const svg = await generateSceneSVG(sc, plan, style, tone, palette);
+        completed++;
+        fillPlanCard(i, svg);
+        updateLoader(
+          `Génération des scènes… ${completed}/${total}`,
+          0.08 + 0.87 * (completed / total)
+        );
+        return svg;
+      } catch (e) {
+        completed++;
+        fillPlanCard(i, fallbackSVG(sc, palette), true);
+        updateLoader(`Scène ${i + 1} échouée (fallback)`, 0.08 + 0.87 * (completed / total));
+        return fallbackSVG(sc, palette);
+      }
+    }, concurrency);
+
+    // ÉTAPE 3 : Assemblage
+    state.scenes = plan.scenes.map((sc, i) => ({ ...sc, svg: svgs[i] }));
+    updateLoader('Assemblage final…', 1);
+    await sleep(500);
+
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+
+    // ÉTAPE 4 : Lecteur
+    renderViewer();
+    showScreen('viewer');
+    await sleep(80);
+    navigateTo(0);
+
+  } catch (e) {
+    console.error(e);
+    if (state.timerInterval) clearInterval(state.timerInterval);
+    showScreen('input');
+    $('generateBtn').disabled = false;
+    $('status').textContent = 'Erreur : ' + e.message;
+    $('status').className = 'error';
+  }
+}
+
+$('generateBtn').onclick = orchestrate;
+
+/* ============================================================
+ *  INIT
+ * ============================================================ */
+</script>
+</body>
+</html>
