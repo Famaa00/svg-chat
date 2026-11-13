@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<!-- saved from url=(0067)file:///C:/Users/Admin/Downloads/deepseek_html_20261113_00e307.html -->
+<html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAL · Agnes Generative Interface</title>
+<style>
+  :root {
+    --bg: #06080c;
+    --panel: #0c1018;
+    --panel-2: #111822;
+    --fg: #b8c4d4;
+    --fg-dim: #5a6a7e;
+    --red: #ff2a2a;
+    --red-dim: #551010;
+    --border: #1a2230;
+    --border-bright: #2a3a50;
+    --font: 'Courier New', 'SF Mono', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    overflow: hidden;
+    cursor: crosshair;
+  }
+
+  /* ===== SCÈNE SVG ===== */
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: block;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ===== PANNEAU CHAT ===== */
+  #chat-panel {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    padding: 18px;
+    z-index: 10;
+  }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    pointer-events: auto;
+    padding: 10px 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--red-dim) transparent;
+    max-width: 540px;
+  }
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-thumb { background: var(--red-dim); }
+
+  .msg {
+    margin: 7px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    animation: msgIn 0.22s ease-out;
+    background: rgba(6,8,12,0.88);
+    backdrop-filter: blur(6px);
+  }
+  .msg.user {
+    margin-left: auto;
+    max-width: 82%;
+    border-color: #2a3a50;
+    color: #8a9ab0;
+    text-align: right;
+  }
+  .msg.assistant {
+    margin-right: auto;
+    max-width: 94%;
+    border-color: var(--red-dim);
+    color: var(--fg);
+  }
+  .msg.error { border-color: var(--red); color: var(--red); }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ===== ZONE DE SAISIE ===== */
+  #input-area {
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    max-width: 660px;
+  }
+  #api-keys {
+    width: 100%;
+    height: 38px;
+    background: var(--panel);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    padding: 5px 9px;
+    font-family: var(--font);
+    font-size: 9.5px;
+    resize: none;
+    outline: none;
+    line-height: 1.4;
+  }
+  #api-keys:focus { border-color: var(--border-bright); color: #8898aa; }
+
+  #input-row { display: flex; gap: 6px; align-items: stretch; }
+  #question {
+    flex: 1;
+    background: var(--panel);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    font-family: var(--font);
+    font-size: 13px;
+    resize: none;
+    outline: none;
+    height: 44px;
+  }
+  #question:focus { border-color: var(--border-bright); }
+  #send-btn {
+    background: var(--panel);
+    color: var(--red);
+    border: 1px solid var(--red);
+    padding: 0 18px;
+    font-family: var(--font);
+    font-size: 11px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  #send-btn:hover:not(:disabled) { background: var(--red); color: #000; }
+  #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ===== HUD ===== */
+  #status {
+    position: fixed;
+    top: 12px;
+    right: 18px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    pointer-events: none;
+    z-index: 20;
+  }
+  #status.active { color: var(--red); }
+
+  #svg-counter {
+    position: fixed;
+    bottom: 12px;
+    right: 18px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--fg-dim);
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  /* Cadre décoratif autour de la grille (style 2Advanced) */
+  #grid-frame {
+    position: fixed;
+    pointer-events: none;
+    z-index: 2;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ SCÈNE SVG ============ -->
+<svg id="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1366 645" width="1366" height="645">
+  <defs>
+    <radialgradient id="redGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff4444" stop-opacity="1"></stop>
+      <stop offset="30%" stop-color="#ff1a1a" stop-opacity="0.95"></stop>
+      <stop offset="65%" stop-color="#990000" stop-opacity="0.6"></stop>
+      <stop offset="100%" stop-color="#1a0000" stop-opacity="0"></stop>
+    </radialgradient>
+    <radialgradient id="ringMetal" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#2a3040"></stop>
+      <stop offset="50%" stop-color="#0e1218"></stop>
+      <stop offset="100%" stop-color="#04060a"></stop>
+    </radialgradient>
+    <filter id="halo" x="-150%" y="-150%" width="400%" height="400%">
+      <fegaussianblur stdDeviation="16"></fegaussianblur>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <fegaussianblur stdDeviation="4" result="blur"></fegaussianblur>
+      <femerge>
+        <femergenode in="blur"></femergenode>
+        <femergenode in="SourceGraphic"></femergenode>
+      </femerge>
+    </filter>
+  </defs>
+
+  <!-- Calque des cases (cellules de la grille) -->
+  <g id="cells-layer"><rect x="573.72" y="36" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="577.72" y="40" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-0"><rect x="573.72" y="36" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="0" clip-path="url(#clip-cell-0)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_hs9Jle54kQUw5fONPfp0epw6WxpEvxfh/output_a132bd18e28546fcb371e1594693b9f7.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="573.72" y="36" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="574.72" y="37" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="835.1466666666666" y="36" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="839.1466666666666" y="40" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-1"><rect x="835.1466666666666" y="36" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="1" clip-path="url(#clip-cell-1)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_NfL1MYfNGEpO8TmRacCj8Whdq8gt0cwT/output_6e09f46f7a294a48b44d1e8fa22971b9.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="835.1466666666666" y="36" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="836.1466666666666" y="37" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="1096.5733333333333" y="36" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="1100.5733333333333" y="40" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-2"><rect x="1096.5733333333333" y="36" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="2" clip-path="url(#clip-cell-2)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_MQ2KzEz0jLFmwHKvaPhaCQdNN2vf81iV/output_2aeaac3d87514b46acf30dcd23848108.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="1096.5733333333333" y="36" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="1097.5733333333333" y="37" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="573.72" y="202.33333333333334" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="577.72" y="206.33333333333334" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-3"><rect x="573.72" y="202.33333333333334" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="3" clip-path="url(#clip-cell-3)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_Jf76fy4eCuAzd2Tufj3cs6VqzdqKrpvP/output_ee33ebd267324c058fca0ffa41e0d68a.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="573.72" y="202.33333333333334" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="574.72" y="203.33333333333334" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="835.1466666666666" y="202.33333333333334" width="251.42666666666665" height="156.33333333333334" fill="none" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="1096.5733333333333" y="202.33333333333334" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="1100.5733333333333" y="206.33333333333334" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-5"><rect x="1096.5733333333333" y="202.33333333333334" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="5" clip-path="url(#clip-cell-5)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_i58OlRXY2uylhJcht6rNJoHAgRCQQxYV/output_4110a4967aaf4eb6b1b5d8bcee51bd4d.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="1096.5733333333333" y="202.33333333333334" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="1097.5733333333333" y="203.33333333333334" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="573.72" y="368.6666666666667" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="577.72" y="372.6666666666667" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-6"><rect x="573.72" y="368.6666666666667" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="6" clip-path="url(#clip-cell-6)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_Yykzq7o4tPQv53oSqnq1gzI4dw52auwb/output_570c63334464475185903c5cfbb61721.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="573.72" y="368.6666666666667" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="574.72" y="369.6666666666667" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="835.1466666666666" y="368.6666666666667" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="839.1466666666666" y="372.6666666666667" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-7"><rect x="835.1466666666666" y="368.6666666666667" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="7" clip-path="url(#clip-cell-7)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_0aoz5hEp8YoiFE6lbOzBXeEAGNSb9fob/output_546a34781df94465836bafadc5f5a804.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="835.1466666666666" y="368.6666666666667" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="836.1466666666666" y="369.6666666666667" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g><rect x="1096.5733333333333" y="368.6666666666667" width="251.42666666666665" height="156.33333333333334" fill="#0a0e14" stroke="#141a24" stroke-width="1" rx="2"></rect><rect x="1100.5733333333333" y="372.6666666666667" width="243.42666666666665" height="148.33333333333334" fill="none" stroke="#0f141c" stroke-width="0.5" stroke-dasharray="2 4"></rect><clippath id="clip-cell-8"><rect x="1096.5733333333333" y="368.6666666666667" width="251.42666666666665" height="156.33333333333334"></rect></clippath><g data-cell="8" clip-path="url(#clip-cell-8)"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_ZCcd09LGVLGRtNsVMbb6lM1xpJcujcbv/output_4071c1db4cab4c5f8f9fad4e117fdced.png" preserveAspectRatio="xMidYMid slice" width="251.42666666666665" height="156.33333333333334" x="1096.5733333333333" y="368.6666666666667" style="opacity: 0.88; transition: opacity 0.8s;"></image><rect x="1097.5733333333333" y="369.6666666666667" width="249.42666666666665" height="154.33333333333334" fill="none" stroke="#ff2a2a" stroke-width="0.6" opacity="0.25"></rect></g></g>
+
+  <!-- Œil HAL -->
+  <g id="hal-eye" transform="translate(10, 10) scale(0.000)">
+    <circle id="hal-halo" r="120" fill="url(#redGlow)" filter="url(#halo)" opacity="0.28"></circle>
+    <circle r="92" fill="url(#ringMetal)" stroke="#141a24" stroke-width="1.5"></circle>
+    <circle r="74" fill="none" stroke="#1a222e" stroke-width="0.8"></circle>
+    <circle id="eye-glow" r="48" fill="url(#redGlow)" filter="url(#softGlow)"></circle>
+    <g id="pupil-group" transform="translate(25.40, 8.52)">
+      <circle r="15" fill="#ff2222" opacity="0.95"></circle>
+      <circle r="5" fill="#ffffff" opacity="0.3"></circle>
+    </g>
+    <circle id="loader-arc" r="100" fill="none" stroke="#ff1a1a" stroke-width="2" stroke-dasharray="65 563" stroke-linecap="round" opacity="0" transform="rotate(264)"></circle>
+  </g>
+
+  <!-- Accent visuel (9ème générateur) -->
+  <g id="accent-g"><image href="https://platform-outputs.agnes-ai.space/images/t2i/task_JCraUPv1Yv2B7WVPfbltKaymZTcXoEPB/output_4aceedb6497442c9a8d98c6c2e07f86b.png" x="1258" y="505" width="84" height="84" preserveAspectRatio="xMidYMid slice" style="opacity: 0.7; transition: opacity 0.6s;"></image></g>
+</svg>
+
+<!-- ============ PANNEAU CHAT ============ -->
+<div id="chat-panel">
+  <div id="messages"><div class="msg user">salut</div><div class="msg assistant">
+
+Salut ! Comment puis-je t’aider ?</div><div class="msg user">j'aime beaucoup les chats, et toi ?</div><div class="msg assistant">
+
+Les chats sont effectivement adorables ! Moi je suis une IA, donc je ne ressens pas d'affection, mais j'adore en parler 😺
+
+Tu as un chat ?</div><div class="msg user">non mais j'en ai eu</div><div class="msg assistant">
+
+Ah, tu en as déjà eu ! C'est toujours merveilleux d'avoir partagé sa vie avec eux 🐾 
+
+Tu as eu quel type de chat ? Tu penses peut-être à en adopter un nouveau un jour ?</div><div class="msg user">j'aime les chiens</div><div class="msg assistant">
+
+Ah ! Les chiens sont incroyables aussi 🐕 Leur loyauté et leur joie de vivre ont quelque chose de magique.
+
+Tu as un chien en ce moment ? Ou c'est une préférence au cas où tu en adopterais un un jour ?</div></div>
+  <div id="input-area">
+    <textarea id="api-keys" placeholder="Clés API (1 par ligne). Ligne 1 = chat (agnes-2.5-flash). Lignes 2-10 = images (agnes-image-2.5-flash)."></textarea>
+    <div id="input-row">
+      <textarea id="question" placeholder="Posez votre question… (ex: parle-moi des sushis)"></textarea>
+      <button id="send-btn">ENVOYER</button>
+    </div>
+  </div>
+</div>
+
+<div id="status" class="">STANDBY</div>
+<div id="svg-counter">IMAGES: 8 / 9</div>
+
+<script>
+/* ============================================================
+   1. CONFIGURATION
+   ============================================================ */
+const API_BASE    = 'https://apihub.agnes-ai.com/v1';
+const MODEL_TEXT  = 'agnes-2.5-flash';
+const MODEL_IMAGE = 'agnes-image-2.5-flash';
+const COOKIE_NAME = 'hal_api_keys';
+
+/* Rôles visuels — chacun est assigné à une case et reçoit un prompt d'image */
+const SVG_ROLES = [
+  { name: 'sujet',     prompt: 'The main subject or object of the conversation. Isolated, recognizable, clean composition, dark background with red accents.' },
+  { name: 'decor',     prompt: 'Background environment or setting related to the conversation. Atmospheric, wide, minimalist, dark tones.' },
+  { name: 'detail',    prompt: 'A small detail or ornament related to the subject. Close-up, fine lines, monochrome with a red accent.' },
+  { name: 'ambiance',  prompt: 'An abstract texture or mood piece evoking the theme. Geometric, atmospheric, dark and red.' },
+  { name: 'objet2',    prompt: 'A secondary object or element mentioned in the conversation. Clean, isolated, minimal.' },
+  { name: 'structure', prompt: 'A geometric structure or frame surrounding the theme. Architectural lines, technical diagram style.' },
+  { name: 'symbole',   prompt: 'A minimalist symbol or icon representing the theme. Very simple, 2-3 strokes, red accent.' },
+  { name: 'ornement',  prompt: 'An abstract ornamental pattern or curve related to the theme. Decorative, flowing lines.' },
+  { name: 'accent',    prompt: 'A small visual accent or highlight (spark, star, point) to punctuate the composition. Minimal, red.' }
+];
+
+const GRID = [
+  { col: 0, row: 0 }, { col: 1, row: 0 }, { col: 2, row: 0 },
+  { col: 0, row: 1 }, { col: 1, row: 1 }, { col: 2, row: 1 },
+  { col: 0, row: 2 }, { col: 1, row: 2 }, { col: 2, row: 2 },
+];
+
+const ROLE_CELL = {
+  'sujet': 0, 'decor': 1, 'detail': 2,
+  'ambiance': 3, 'objet2': 5,
+  'structure': 6, 'symbole': 7, 'ornement': 8,
+  'accent': -1
+};
+
+/* ============================================================
+   2. DOM
+   ============================================================ */
+const svgStage    = document.getElementById('stage');
+const halEye      = document.getElementById('hal-eye');
+const pupilGroup  = document.getElementById('pupil-group');
+const eyeGlow     = document.getElementById('eye-glow');
+const halo        = document.getElementById('hal-halo');
+const loaderArc   = document.getElementById('loader-arc');
+const cellsLayer  = document.getElementById('cells-layer');
+const messagesEl  = document.getElementById('messages');
+const apiKeysEl   = document.getElementById('api-keys');
+const questionEl  = document.getElementById('question');
+const sendBtn     = document.getElementById('send-btn');
+const statusEl    = document.getElementById('status');
+const svgCounter  = document.getElementById('svg-counter');
+
+/* ============================================================
+   3. GRILLE — construction des cases
+   ============================================================ */
+let gridMetrics = { cellW: 0, cellH: 0, offsetX: 0, offsetY: 0, gap: 10 };
+const cellElements = {};
+const cellFilled = {};
+
+function buildGrid() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const marginLeft = Math.min(600, w * 0.42);
+  const marginBottom = 120;
+  const marginTop = 36;
+  const marginRight = 18;
+
+  const availW = w - marginLeft - marginRight;
+  const availH = h - marginTop - marginBottom;
+  const gap = gridMetrics.gap;
+  const cellW = (availW - gap * 2) / 3;
+  const cellH = (availH - gap * 2) / 3;
+  const offsetX = marginLeft;
+  const offsetY = marginTop;
+
+  gridMetrics = { cellW, cellH, offsetX, offsetY, gap };
+
+  cellsLayer.innerHTML = '';
+
+  GRID.forEach((pos, idx) => {
+    const isCenter = pos.col === 1 && pos.row === 1;
+    const x = offsetX + pos.col * (cellW + gap);
+    const y = offsetY + pos.row * (cellH + gap);
+
+    // Cadre de la case
+    const frame = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    frame.setAttribute('x', x);
+    frame.setAttribute('y', y);
+    frame.setAttribute('width', cellW);
+    frame.setAttribute('height', cellH);
+    frame.setAttribute('fill', isCenter ? 'none' : '#0a0e14');
+    frame.setAttribute('stroke', '#141a24');
+    frame.setAttribute('stroke-width', '1');
+    frame.setAttribute('rx', '2');
+    cellsLayer.appendChild(frame);
+
+    // Lignes décoratives internes (style tech)
+    if (!isCenter) {
+      const inner = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      inner.setAttribute('x', x + 4);
+      inner.setAttribute('y', y + 4);
+      inner.setAttribute('width', cellW - 8);
+      inner.setAttribute('height', cellH - 8);
+      inner.setAttribute('fill', 'none');
+      inner.setAttribute('stroke', '#0f141c');
+      inner.setAttribute('stroke-width', '0.5');
+      inner.setAttribute('stroke-dasharray', '2 4');
+      cellsLayer.appendChild(inner);
+    }
+
+    if (isCenter) return;
+
+    // Groupe conteneur pour l'œuvre
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('data-cell', idx);
+
+    // Clip pour confinement
+    const clipId = `clip-cell-${idx}`;
+    const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    clip.setAttribute('id', clipId);
+    const clipRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    clipRect.setAttribute('x', x);
+    clipRect.setAttribute('y', y);
+    clipRect.setAttribute('width', cellW);
+    clipRect.setAttribute('height', cellH);
+    clip.appendChild(clipRect);
+    cellsLayer.appendChild(clip);
+    g.setAttribute('clip-path', `url(#${clipId})`);
+
+    cellsLayer.appendChild(g);
+    g._cellGeom = { x, y, w: cellW, h: cellH };
+  });
+
+  // Repositionner les œuvres existantes (resize)
+  Object.entries(cellElements).forEach(([role, data]) => {
+    const cellIdx = ROLE_CELL[role];
+    if (cellIdx === -1 || cellIdx === undefined) return;
+    const g = findCellGroup(cellIdx);
+    if (g && data.el) positionElementInCell(data.el, g._cellGeom);
+  });
+}
+
+function findCellGroup(cellIdx) {
+  const groups = cellsLayer.querySelectorAll('g[data-cell]');
+  for (const g of groups) {
+    if (parseInt(g.getAttribute('data-cell'), 10) === cellIdx) return g;
+  }
+  return null;
+}
+
+/* ============================================================
+   4. DIMENSIONNEMENT + ŒIL
+   ============================================================ */
+let eyeCenter = { x: 0, y: 0 };
+
+function resizeStage() {
+  const w = window.innerWidth, h = window.innerHeight;
+  svgStage.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svgStage.setAttribute('width', w);
+  svgStage.setAttribute('height', h);
+
+  const g = gridMetrics;
+  const cx = g.offsetX + 1 * (g.cellW + g.gap) + g.cellW / 2;
+  const cy = g.offsetY + 1 * (g.cellH + g.gap) + g.cellH / 2;
+  const scale = Math.min(g.cellW, g.cellH) / 240;
+  halEye.setAttribute('transform', `translate(${cx}, ${cy}) scale(${scale.toFixed(3)})`);
+  eyeCenter.x = cx;
+  eyeCenter.y = cy;
+
+  buildGrid();
+}
+window.addEventListener('resize', resizeStage);
+resizeStage();
+
+/* Suivi souris */
+let mouseX = 0, mouseY = 0;
+document.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
+
+let currentPupil = { x: 0, y: 0 };
+function animatePupil() {
+  const dx = mouseX - eyeCenter.x;
+  const dy = mouseY - eyeCenter.y;
+  const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+  const maxR = 28;
+  const r = Math.min(maxR, dist * 0.07);
+  const tx = (dx / dist) * r;
+  const ty = (dy / dist) * r;
+  currentPupil.x += (tx - currentPupil.x) * 0.15;
+  currentPupil.y += (ty - currentPupil.y) * 0.15;
+  pupilGroup.setAttribute('transform', `translate(${currentPupil.x.toFixed(2)}, ${currentPupil.y.toFixed(2)})`);
+  requestAnimationFrame(animatePupil);
+}
+animatePupil();
+
+/* ============================================================
+   5. ÉTATS VISUELS
+   ============================================================ */
+let pulseInterval = null;
+
+function startThinking() {
+  statusEl.textContent = 'PROCESSING';
+  statusEl.classList.add('active');
+  loaderArc.setAttribute('opacity', '1');
+  let angle = 0;
+  pulseInterval = setInterval(() => {
+    angle = (angle + 6) % 360;
+    loaderArc.setAttribute('transform', `rotate(${angle})`);
+    const s = 1 + Math.sin(Date.now() / 170) * 0.05;
+    eyeGlow.setAttribute('r', (48 * s).toFixed(2));
+    halo.setAttribute('r', (120 * s).toFixed(2));
+  }, 16);
+}
+
+function stopThinking() {
+  statusEl.textContent = 'STANDBY';
+  statusEl.classList.remove('active');
+  loaderArc.setAttribute('opacity', '0');
+  clearInterval(pulseInterval);
+  eyeGlow.setAttribute('r', '48');
+  halo.setAttribute('r', '120');
+}
+
+function blink() {
+  let t = 0;
+  const anim = setInterval(() => {
+    t += 0.1;
+    const s = Math.abs(Math.cos(t * Math.PI)) * 0.5 + 0.5;
+    eyeGlow.setAttribute('r', (48 * s).toFixed(2));
+    if (t >= 1) { clearInterval(anim); eyeGlow.setAttribute('r', '48'); }
+  }, 18);
+}
+
+/* ============================================================
+   6. COOKIES
+   ============================================================ */
+function setCookie(name, value, days) {
+  const d = new Date();
+  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; SameSite=Strict`;
+}
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+const saved = getCookie(COOKIE_NAME);
+if (saved) apiKeysEl.value = saved;
+let saveTimer = null;
+apiKeysEl.addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => setCookie(COOKIE_NAME, apiKeysEl.value, 7), 500);
+});
+function getKeys() {
+  return apiKeysEl.value.split('\n').map(k => k.trim()).filter(Boolean);
+}
+
+/* ============================================================
+   7. MESSAGES
+   ============================================================ */
+function addMessage(text, role) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+/* ============================================================
+   8. APPEL CHAT (TEXTE)
+   ============================================================ */
+async function callChat(history, apiKey) {
+  const res = await fetch(`${API_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: MODEL_TEXT, messages: history, stream: false })
+  });
+  if (!res.ok) throw new Error(`Chat HTTP ${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? '(réponse vide)';
+}
+
+/* ============================================================
+   9. GÉNÉRATION D'IMAGE (AGNES IMAGE 2.5 FLASH)
+   ============================================================ */
+async function callImageGenerator(roleConfig, context, apiKey) {
+  // Prompt structuré selon les recommandations Agnes :
+  // [Sujet] + [Environnement] + [Style] + [Composition] + [Éclairage]
+  const prompt = `Dark sci-fi technical illustration. Subject: ${roleConfig.prompt}. Context from conversation: ${context}. Style: minimalist vector-like, thin lines, monochrome dark blue-gray palette with a single bright red accent (#ff2a2a). Composition: clean, isolated on dark background, subtle grid or technical diagram elements. Lighting: soft glow, cinematic. Quality: high detail, sharp.`;
+
+  const res = await fetch(`${API_BASE}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: MODEL_IMAGE,
+      prompt: prompt,
+      size: '1K',
+      ratio: '1:1',
+      extra_body: { response_format: 'url' }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.warn(`[${roleConfig.name}] Image HTTP ${res.status} — ${errText.slice(0, 120)}`);
+    return null;
+  }
+
+  const data = await res.json();
+  // L'API renvoie l'URL dans data[0].url
+  return data.data?.[0]?.url || null;
+}
+
+/* ============================================================
+   10. INJECTION DES IMAGES DANS LES CASES
+   ============================================================ */
+let imageCount = 0;
+
+function positionElementInCell(el, geom) {
+  el.setAttribute('width', geom.w);
+  el.setAttribute('height', geom.h);
+  el.setAttribute('x', geom.x);
+  el.setAttribute('y', geom.y);
+  el.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+}
+
+/**
+ * Injecte une image dans la case assignée au rôle.
+ * Utilise <image> SVG avec href vers l'URL générée.
+ */
+function injectImageInCell(imageUrl, roleName) {
+  const cellIdx = ROLE_CELL[roleName];
+  if (cellIdx === undefined) return;
+
+  // Cas spécial "accent" : coin bas-droite
+  if (cellIdx === -1) {
+    injectAccentImage(imageUrl);
+    return;
+  }
+
+  const g = findCellGroup(cellIdx);
+  if (!g) return;
+
+  // Retirer l'ancienne œuvre
+  while (g.firstChild) g.removeChild(g.firstChild);
+
+  // Créer un <image> SVG
+  const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+  img.setAttribute('href', imageUrl);
+  img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  positionElementInCell(img, g._cellGeom);
+
+  // Fondu d'apparition
+  img.style.opacity = '0';
+  img.style.transition = 'opacity 0.8s ease';
+  g.appendChild(img);
+  requestAnimationFrame(() => { img.style.opacity = '0.88'; });
+
+  // Ajouter un léger cadre rouge autour de l'image
+  const border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  border.setAttribute('x', g._cellGeom.x + 1);
+  border.setAttribute('y', g._cellGeom.y + 1);
+  border.setAttribute('width', g._cellGeom.w - 2);
+  border.setAttribute('height', g._cellGeom.h - 2);
+  border.setAttribute('fill', 'none');
+  border.setAttribute('stroke', '#ff2a2a');
+  border.setAttribute('stroke-width', '0.6');
+  border.setAttribute('opacity', '0.25');
+  g.appendChild(border);
+
+  cellElements[roleName] = { el: img };
+  cellFilled[roleName] = true;
+
+  imageCount = Object.keys(cellFilled).length;
+  svgCounter.textContent = `IMAGES: ${imageCount} / 9`;
+}
+
+function injectAccentImage(imageUrl) {
+  const accentG = document.getElementById('accent-g');
+  while (accentG.firstChild) accentG.removeChild(accentG.firstChild);
+
+  const size = 84;
+  const x = window.innerWidth - size - 24;
+  const y = window.innerHeight - size - 56;
+
+  const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+  img.setAttribute('href', imageUrl);
+  img.setAttribute('x', x);
+  img.setAttribute('y', y);
+  img.setAttribute('width', size);
+  img.setAttribute('height', size);
+  img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  img.style.opacity = '0';
+  img.style.transition = 'opacity 0.6s ease';
+  accentG.appendChild(img);
+  requestAnimationFrame(() => { img.style.opacity = '0.7'; });
+}
+
+/* ============================================================
+   11. PIPELINE PRINCIPAL
+   ============================================================ */
+let conversationHistory = [];
+let busy = false;
+
+async function sendQuestion() {
+  if (busy) return;
+  const question = questionEl.value.trim();
+  if (!question) return;
+
+  const keys = getKeys();
+  if (keys.length < 1) {
+    addMessage('⚠ Aucune clé API. Collez-en au moins une.', 'error');
+    return;
+  }
+
+  const chatKey = keys[0];
+  const imageKeys = keys.slice(1, 10);
+
+  busy = true;
+  sendBtn.disabled = true;
+  questionEl.value = '';
+
+  addMessage(question, 'user');
+  blink();
+  startThinking();
+
+  try {
+    conversationHistory.push({ role: 'user', content: question });
+    const answer = await callChat(conversationHistory, chatKey);
+    conversationHistory.push({ role: 'assistant', content: answer });
+    addMessage(answer, 'assistant');
+
+    // Contexte pour les générateurs d'images
+    const recent = conversationHistory.slice(-4);
+    const context = recent.map(m => `${m.role}: ${m.content}`).join('\n').slice(0, 800);
+
+    // Lancer les générations d'images en parallèle
+    if (imageKeys.length > 0) {
+      SVG_ROLES.slice(0, imageKeys.length).forEach((role, i) => {
+        callImageGenerator(role, context, imageKeys[i])
+          .then(url => {
+            if (url) injectImageInCell(url, role.name);
+          })
+          .catch(err => console.warn(`[${role.name}]`, err.message));
+      });
+    }
+
+  } catch (err) {
+    addMessage(`Erreur : ${err.message}`, 'error');
+  } finally {
+    stopThinking();
+    busy = false;
+    sendBtn.disabled = false;
+    questionEl.focus();
+  }
+}
+
+/* ============================================================
+   12. ÉVÉNEMENTS
+   ============================================================ */
+sendBtn.addEventListener('click', sendQuestion);
+questionEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuestion(); }
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#input-area')) return;
+  blink();
+});
+</script>
+
+</body></html>
